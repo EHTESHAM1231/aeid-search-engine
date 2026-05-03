@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADIE | Processing</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .processing-card {
+            text-align: center;
+            color: white;
+            max-width: 500px;
+            padding: 3rem;
+        }
+        .processing-card h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        .processing-card p {
+            color: #94a3b8;
+            margin-bottom: 2rem;
+        }
+        .spinner-lg {
+            width: 80px; height: 80px;
+            border: 5px solid rgba(255,255,255,0.1);
+            border-left-color: #10b981;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 2rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .status-text {
+            font-size: 0.9rem;
+            color: #10b981;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+        }
+        .elapsed {
+            font-size: 0.8rem;
+            color: #64748b;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="processing-card">
+        <div class="spinner-lg"></div>
+        <h1>{{ stage }} IN PROGRESS</h1>
+        <p>ADIE Pipeline is processing your dataset. This page will automatically update when complete.</p>
+        <div class="status-text" id="statusText">WORKING...</div>
+        <div class="elapsed" id="elapsed">Elapsed: 0s</div>
+    </div>
+
+    <script>
+        const jobId = "{{ job_id }}";
+        const startTime = Date.now();
+
+        function updateElapsed() {
+            const secs = Math.floor((Date.now() - startTime) / 1000);
+            document.getElementById('elapsed').textContent = 'Elapsed: ' + secs + 's';
+        }
+
+        function pollStatus() {
+            fetch('/job_status/' + jobId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'done') {
+                        document.getElementById('statusText').textContent = 'COMPLETE — REDIRECTING...';
+                        window.location.reload();
+                    } else if (data.status === 'error') {
+                        document.getElementById('statusText').textContent = 'ERROR: ' + (data.error || 'Unknown');
+                        document.getElementById('statusText').style.color = '#ef4444';
+                        setTimeout(() => { window.location.href = '/dashboard'; }, 3000);
+                    } else {
+                        document.getElementById('statusText').textContent = data.status.toUpperCase() + '...';
+                    }
+                })
+                .catch(() => {});
+        }
+
+        setInterval(updateElapsed, 1000);
+        setInterval(pollStatus, 3000);
+    </script>
+</body>
+</html>
