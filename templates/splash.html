@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADIE | Intelligence Initialized</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background: #0f172a;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            margin: 0;
+        }
+        .splash-container {
+            text-align: center;
+            color: white;
+            animation: fadeIn 1.5s ease-out;
+        }
+        .logo-box {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 5rem;
+            font-weight: 700;
+            letter-spacing: -0.05em;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .logo-box i {
+            color: var(--accent);
+            animation: pulse 2s infinite;
+        }
+        .tagline {
+            font-size: 1.2rem;
+            color: #94a3b8;
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+        .loader-bar {
+            width: 300px;
+            height: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            margin: 3rem auto 0;
+            position: relative;
+            overflow: hidden;
+        }
+        .loader-bar::after {
+            content: '';
+            position: absolute;
+            left: -100%;
+            top: 0;
+            height: 100%;
+            width: 100%;
+            background: var(--accent);
+            animation: load 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes load {
+            0% { left: -100%; }
+            100% { left: 0%; }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.8; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div class="splash-container">
+        <div class="logo-box">
+            <i class="fas fa-microchip"></i> ADIE
+        </div>
+        <div class="tagline">Dataset Intelligence Engineering</div>
+        <div class="loader-bar"></div>
+    </div>
+
+    <script>
+        console.log("Splash screen active. Redirecting to login in 3 seconds...");
+        setTimeout(function() {
+            console.log("Redirecting now...");
+            window.location.replace("{{ url_for('login') }}");
+        }, 3000);
+    </script>
+</body>
+</html>

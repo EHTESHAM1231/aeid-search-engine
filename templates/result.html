@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADIE | Analysis Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">PROCESSING CYCLE</div>
+        <div class="loading-subtext">ADIE Pipeline is processing your request. This may take a moment...</div>
+        <div class="processing-bar"></div>
+    </div>
+
+    <div class="container">
+        <header style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem;">
+            <div>
+                <h1 style="font-size: 2rem; margin: 0;">ANALYSIS DASHBOARD</h1>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Dataset: <span style="color: var(--primary); font-weight: 700;">{{ filename }}</span></p>
+            </div>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                <div style="text-align: right; margin-right: 1rem;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted);">{{ session['user']|upper }}</div>
+                    <a href="{{ url_for('logout') }}" style="font-size: 0.65rem; color: var(--danger); text-decoration: none; font-weight: 700;">LOGOUT</a>
+                </div>
+                <a href="/dashboard" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> NEW ANALYSIS</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-success">
+                <i class="fas fa-check-circle"></i> {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        {% if expert_report %}
+        <div class="card" style="border-top: 4px solid var(--primary);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                <div>
+                    <h3 style="margin-bottom: 0.25rem;"><i class="fas fa-award" style="color: var(--warning);"></i> ELIGIBILITY & HEALTH REPORT</h3>
+                    <p style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700;">VERSION: {{ expert_report.summary.version|upper }}</p>
+                </div>
+                <div style="padding: 0.5rem 1rem; background: var(--text-main); color: white; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.1em;">
+                    {{ expert_report.summary.suitability }}
+                </div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                <div>
+                    <div class="stat-label">QUALITY SCORE</div>
+                    <div class="stat-value">{{ expert_report.summary.quality_score }}%</div>
+                </div>
+                <div>
+                    <div class="stat-label">DOMAIN</div>
+                    <div style="font-weight: 700; margin-top: 0.5rem;">{{ expert_report.summary.domain }}</div>
+                </div>
+                <div>
+                    <div class="stat-label">INDUSTRY</div>
+                    <div style="font-weight: 700; margin-top: 0.5rem;">{{ expert_report.summary.industry }}</div>
+                </div>
+            </div>
+
+            <!-- FYP Feature: Issue Identification & Severity -->
+            <div style="margin-top: 3rem;">
+                <h4 style="font-size: 0.8rem; margin-bottom: 1rem; color: var(--text-muted);">ISSUE IDENTIFICATION & CLASSIFICATION</h4>
+                <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem;">
+                    {% if diagnostics.identified_issues %}
+                        {% for issue in diagnostics.identified_issues %}
+                        <div style="padding: 1rem; background: #f8fafc; border: 1px solid var(--border); border-left: 4px solid {% if issue.severity == 'High' %}var(--danger){% else %}var(--warning){% endif %};">
+                            <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted);">{{ issue.type|upper }}</div>
+                            <div style="font-weight: 700; margin-top: 0.25rem;">{{ issue.severity }}</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="grid-column: 1 / -1; padding: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; font-size: 0.8rem;">
+                            <i class="fas fa-check-circle"></i> No critical data quality issues identified.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- FYP Feature: Intervention Selection Module -->
+            {% if expert_report.interventions %}
+            <div style="margin-top: 3rem; padding: 1.5rem; background: #f8fafc; border: 1px solid var(--border);">
+                <h4 style="font-size: 0.8rem; margin-bottom: 1rem; color: var(--text-muted);">INTERVENTION SELECTION MODULE</h4>
+                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                    {% for item in expert_report.interventions %}
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding-bottom: 0.75rem; border-bottom: 1px dashed var(--border);">
+                        <div style="flex: 1;">
+                            <span style="font-weight: 700; color: var(--primary);">{{ item.issue }}:</span> {{ item.strategy }}
+                        </div>
+                        <div style="flex: 1; text-align: right; color: var(--text-muted); font-style: italic;">
+                            {{ item.rationale }}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="grid" style="margin-top: 3rem;">
+                <div style="border-left: 3px solid var(--success); padding-left: 1.5rem;">
+                    <h4 style="font-size: 0.9rem; color: var(--success); margin-bottom: 1rem;">STRENGTHS</h4>
+                    <ul style="list-style: none; font-size: 0.85rem; color: var(--text-muted);">
+                        {% for s in expert_report.swot.strengths %}
+                        <li style="margin-bottom: 0.5rem;"><i class="fas fa-check" style="margin-right: 0.5rem;"></i> {{ s }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                <div style="border-left: 3px solid var(--danger); padding-left: 1.5rem;">
+                    <h4 style="font-size: 0.9rem; color: var(--danger); margin-bottom: 1rem;">WEAKNESSES</h4>
+                    <ul style="list-style: none; font-size: 0.85rem; color: var(--text-muted);">
+                        {% for w in expert_report.swot.weaknesses %}
+                        <li style="margin-bottom: 0.5rem;"><i class="fas fa-exclamation-triangle" style="margin-right: 0.5rem;"></i> {{ w }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if metadata %}
+        <div class="card">
+            <h3><i class="fas fa-fingerprint" style="color: var(--accent);"></i> METADATA EXTRACTION</h3>
+            <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+                <div>
+                    <div class="stat-label">ROWS</div>
+                    <div class="stat-value" style="font-size: 1.5rem;">{{ metadata.rows }}</div>
+                </div>
+                <div>
+                    <div class="stat-label">COLUMNS</div>
+                    <div class="stat-value" style="font-size: 1.5rem;">{{ metadata.columns }}</div>
+                </div>
+                <div>
+                    <div class="stat-label">SIZE</div>
+                    <div class="stat-value" style="font-size: 1.5rem;">{{ metadata.size_kb }}<span style="font-size: 0.8rem;">KB</span></div>
+                </div>
+                <div style="display: flex; align-items: flex-end;">
+                    <a href="/download_cleaned" class="btn btn-secondary" style="width: 100%; padding: 0.5rem;">EXPORT CSV</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if diagnostics %}
+        <div class="card">
+            <h3><i class="fas fa-microchip" style="color: var(--primary);"></i> ADIE PIPELINE</h3>
+            {% if not cleaned %}
+            <div style="text-align: center; padding: 2rem;">
+                <p style="color: var(--text-muted); margin-bottom: 2rem;">Pipeline initialized. Ready for deep repair and optimization.</p>
+                <form action="/clean" method="post" style="max-width: 700px; margin: 0 auto; text-align: left; display: grid; gap: 0.75rem;">
+                    <label style="font-size: 0.78rem; font-weight: 700; color: var(--text-muted);">CLEANING MODE</label>
+                    <select name="cleaning_mode" class="btn btn-secondary" style="width: 100%; text-transform: none;">
+                        <option value="gentle" selected>Gentle (recommended, no harsh drops)</option>
+                        <option value="balanced">Balanced</option>
+                        <option value="aggressive">Aggressive</option>
+                    </select>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; font-size: 0.78rem; color: var(--text-muted); margin: 0.5rem 0 1rem 0;">
+                        <label><input type="checkbox" name="remove_duplicates" checked> Remove exact duplicates</label>
+                        <label><input type="checkbox" name="handle_outliers" checked> Cap outliers (IQR)</label>
+                        <label><input type="checkbox" name="drop_identifier_columns"> Drop identifier columns</label>
+                        <label><input type="checkbox" name="drop_leakage_columns"> Drop leakage columns</label>
+                        <label><input type="checkbox" name="drop_high_missing_columns"> Drop high-missing columns</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="padding: 1rem 3rem;">EXECUTE PIPELINE</button>
+                </form>
+            </div>
+            {% else %}
+            <div class="grid">
+                <div style="background: #f8fafc; padding: 1.5rem; border: 1px solid var(--border);">
+                    <h4 style="font-size: 0.8rem; margin-bottom: 1.5rem;">AUTO-ML CONFIGURATION</h4>
+                    <form action="/train" method="post" style="display: flex; flex-direction: column; gap: 1rem;">
+                        <select name="algorithm" class="btn btn-secondary" style="width: 100%; text-transform: none;">
+                            <option value="All Algorithms">All Algorithms</option>
+                            <option value="Random Forest">Random Forest</option>
+                            <option value="Decision Tree">Decision Tree</option>
+                            <option value="Logistic Regression">Logistic Regression</option>
+                            <option value="KNN">KNN</option>
+                            <option value="Linear Regression">Linear Regression</option>
+                        </select>
+                        <button type="submit" class="btn btn-primary">RUN BENCHMARK</button>
+                    </form>
+                </div>
+                <div style="display: flex; flex-direction: column; justify-content: center; gap: 1rem;">
+                    <div class="alert alert-success" style="margin: 0; padding: 0.75rem 1rem; font-size: 0.8rem;">
+                        <i class="fas fa-check"></i> PIPELINE STAGE 2 COMPLETE: DATA REPAIRED
+                    </div>
+                    <div class="alert alert-info" style="margin: 0; padding: 0.75rem 1rem; font-size: 0.8rem;">
+                        <i class="fas fa-info-circle"></i> READY FOR STAGE 3: MODEL INTELLIGENCE
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if cleaned and orig_diagnostics %}
+        <div class="card" style="border-top: 4px solid var(--success); margin-top: 2rem;">
+            <h3><i class="fas fa-chart-line" style="color: var(--success);"></i> BEFORE vs AFTER DATASET SITUATION</h3>
+            <p style="color: var(--text-muted); margin-bottom: 2rem; font-size: 0.9rem;">Comprehensive comparison showing data quality improvements after ADIE Pipeline repair.</p>
+            
+            <!-- Summary Metrics -->
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 3rem;">
+                <div style="background: #fef3c7; padding: 1.5rem; border-radius: 8px; border: 2px solid #f59e0b;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #92400e; margin-bottom: 0.5rem;">ISSUES BEFORE</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #f59e0b;">{{ orig_diagnostics.identified_issues|length }}</div>
+                </div>
+                <div style="background: #dcfce7; padding: 1.5rem; border-radius: 8px; border: 2px solid #22c55e;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem;">ISSUES AFTER</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #22c55e;">{{ diagnostics.identified_issues|length if diagnostics.identified_issues else 0 }}</div>
+                </div>
+                <div style="background: #dbeafe; padding: 1.5rem; border-radius: 8px; border: 2px solid #3b82f6;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #1e40af; margin-bottom: 0.5rem;">ISSUES RESOLVED</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #3b82f6;">{{ (orig_diagnostics.identified_issues|length) - (diagnostics.identified_issues|length if diagnostics.identified_issues else 0) }}</div>
+                </div>
+                <div style="background: #f3e8ff; padding: 1.5rem; border-radius: 8px; border: 2px solid #a855f7;">
+                    <div style="font-size: 0.75rem; font-weight: 700; color: #6b21a8; margin-bottom: 0.5rem;">IMPROVEMENT</div>
+                    <div style="font-size: 2.5rem; font-weight: 800; color: #a855f7;">
+                        {% if orig_diagnostics.identified_issues|length > 0 %}
+                            {{ (((orig_diagnostics.identified_issues|length) - (diagnostics.identified_issues|length if diagnostics.identified_issues else 0)) / orig_diagnostics.identified_issues|length * 100)|round(1) }}%
+                        {% else %}
+                            0%
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Detailed Comparison Chart -->
+            <div style="height: 400px; margin-bottom: 3rem;">
+                <canvas id="beforeAfterChart"></canvas>
+            </div>
+
+            <!-- Side-by-Side Issue Comparison -->
+            <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 3rem;">
+                <!-- BEFORE -->
+                <div>
+                    <h4 style="color: var(--warning); margin-bottom: 1rem;"><i class="fas fa-exclamation-triangle"></i> BEFORE CLEANING</h4>
+                    {% if orig_diagnostics.identified_issues %}
+                        {% for issue in orig_diagnostics.identified_issues %}
+                        <div style="padding: 1rem; margin-bottom: 0.75rem; background: #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-weight: 700; font-size: 0.85rem;">{{ issue.type }}</div>
+                                <div style="padding: 0.25rem 0.5rem; background: {% if issue.severity == 'High' %}#fee2e2{% else %}#fef3c7{% endif %}; color: {% if issue.severity == 'High' %}#dc2626{% else %}#d97706{% endif %}; font-size: 0.7rem; font-weight: 700; border-radius: 4px;">{{ issue.severity }}</div>
+                            </div>
+                            <div style="font-size: 0.75rem; color: #92400e; margin-top: 0.5rem;">Score: {{ '%.4f'|format(issue.score) }}</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="padding: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;">
+                            <i class="fas fa-check-circle"></i> No issues detected
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- AFTER -->
+                <div>
+                    <h4 style="color: var(--success); margin-bottom: 1rem;"><i class="fas fa-check-circle"></i> AFTER CLEANING</h4>
+                    {% if diagnostics.identified_issues %}
+                        {% for issue in diagnostics.identified_issues %}
+                        <div style="padding: 1rem; margin-bottom: 0.75rem; background: #f0fdf4; border-left: 4px solid #22c55e; border-radius: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-weight: 700; font-size: 0.85rem;">{{ issue.type }}</div>
+                                <div style="padding: 0.25rem 0.5rem; background: {% if issue.severity == 'High' %}#fee2e2{% else %}#dcfce7{% endif %}; color: {% if issue.severity == 'High' %}#dc2626{% else %}#166534{% endif %}; font-size: 0.7rem; font-weight: 700; border-radius: 4px;">{{ issue.severity }}</div>
+                            </div>
+                            <div style="font-size: 0.75rem; color: #166534; margin-top: 0.5rem;">Score: {{ '%.4f'|format(issue.score) }}</div>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div style="padding: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;">
+                            <i class="fas fa-check-circle"></i> All issues resolved! Dataset is clean.
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Additional Metrics -->
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); margin-top: 3rem;">
+                <div class="card" style="margin: 0;">
+                    <h4 style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">DATA QUALITY METRICS</h4>
+                    <div style="display: grid; gap: 0.75rem;">
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f8fafc; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Missing Values (Before)</span>
+                            <span style="font-weight: 700; color: var(--warning);">{{ orig_diagnostics.missing_values.total }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f0fdf4; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Missing Values (After)</span>
+                            <span style="font-weight: 700; color: var(--success);">{{ diagnostics.missing_values.total }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f8fafc; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Duplicates (Before)</span>
+                            <span style="font-weight: 700; color: var(--warning);">{{ orig_diagnostics.duplicates }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f0fdf4; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Duplicates (After)</span>
+                            <span style="font-weight: 700; color: var(--success);">{{ diagnostics.duplicates }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f8fafc; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Outliers (Before)</span>
+                            <span style="font-weight: 700; color: var(--warning);">{{ orig_diagnostics.outliers.total }}</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; padding: 0.75rem; background: #f0fdf4; border-radius: 4px;">
+                            <span style="font-size: 0.85rem;">Outliers (After)</span>
+                            <span style="font-weight: 700; color: var(--success);">{{ diagnostics.outliers.total }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin: 0;">
+                    <h4 style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">REPAIR SUMMARY</h4>
+                    <div style="display: grid; gap: 0.75rem;">
+                        {% if expert_report.interventions %}
+                            {% for intervention in expert_report.interventions %}
+                            <div style="padding: 0.75rem; background: #f8fafc; border-radius: 4px; border-left: 3px solid var(--primary);">
+                                <div style="font-weight: 700; font-size: 0.85rem; color: var(--primary);">{{ intervention.issue }}</div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">{{ intervention.strategy }}</div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div style="padding: 1rem; background: #f0fdf4; color: #166534; text-align: center;">
+                                <i class="fas fa-check-circle"></i> No repairs needed
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if trained %}
+        <div class="card" style="border-top: 4px solid var(--accent);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                <h3><i class="fas fa-chart-bar" style="color: var(--accent);"></i> PERFORMANCE BENCHMARKS</h3>
+                {% if selected_algo != 'All Algorithms' and selected_metrics and selected_metrics.smote_applied %}
+                <div class="expert-badge badge-quality" style="margin: 0;">
+                    <i class="fas fa-balance-scale"></i> SMOTE OPTIMIZED
+                </div>
+                {% endif %}
+            </div>
+            
+            {% if selected_algo == 'All Algorithms' %}
+            <div style="height: 400px; margin-bottom: 3rem;">
+                <canvas id="comparisonChart"></canvas>
+            </div>
+            {% else %}
+            {% if selected_metrics and 'error' not in selected_metrics %}
+            {% set metrics = selected_metrics %}
+            <div class="grid" style="grid-template-columns: 1fr 2fr;">
+                <div style="display: grid; gap: 1rem;">
+                    <div class="card" style="margin: 0; background: #f8fafc;">
+                        <div class="stat-label">PRIMARY METRIC</div>
+                        <div class="stat-value" style="font-size: 2rem;">{{ metrics.Accuracy if task_type == 'classification' else metrics['R2 Score'] }}</div>
+                    </div>
+                    <div class="card" style="margin: 0; background: #f8fafc;">
+                        <div class="stat-label">ALGORITHM</div>
+                        <div style="font-weight: 700; margin-top: 0.5rem;">{{ selected_algo }}</div>
+                    </div>
+                </div>
+                <div class="card" style="margin: 0;">
+                    <div class="stat-label" style="margin-bottom: 1rem;">PREDICTION TREND</div>
+                    <div style="height: 200px;">
+                        <canvas id="predictionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            {% else %}
+            <div class="card" style="background: #fef3c7; border: 2px solid #f59e0b; padding: 2rem; margin: 2rem 0;">
+                <h4 style="color: #92400e; margin-bottom: 1rem;"><i class="fas fa-exclamation-triangle"></i> Model Training Issue</h4>
+                <p style="color: #78350f;">The model "{{ selected_algo }}" failed to train or produce results. This can happen when:</p>
+                <ul style="color: #78350f; margin-left: 2rem; margin-top: 1rem;">
+                    <li>The dataset has incompatible data types</li>
+                    <li>There are too many categorical variables</li>
+                    <li>The model doesn't support this type of task</li>
+                </ul>
+                <p style="color: #78350f; margin-top: 1rem;">Try selecting "All Algorithms" to see which models work with your dataset.</p>
+            </div>
+            {% endif %}
+            {% endif %}
+
+            // Before vs After Dataset Situation Chart
+            {% if cleaned and orig_diagnostics %}
+            const ctxBeforeAfter = document.getElementById('beforeAfterChart');
+            if (ctxBeforeAfter) {
+                const baLabels = [];
+                const baBefore = [];
+                const baAfter = [];
+                
+                {% if orig_diagnostics.identified_issues %}
+                    {% for issue in orig_diagnostics.identified_issues %}
+                    baLabels.push('{{ issue.type }}');
+                    baBefore.push({{ issue.score }});
+                    {% endfor %}
+                {% endif %}
+                
+                // Match after issues
+                {% if diagnostics.identified_issues %}
+                    {% for issue in diagnostics.identified_issues %}
+                    const idx{{ loop.index }} = baLabels.indexOf('{{ issue.type }}');
+                    if (idx{{ loop.index }} !== -1) {
+                        baAfter[idx{{ loop.index }}] = {{ issue.score }};
+                    } else {
+                        baLabels.push('{{ issue.type }}');
+                        baBefore.push(0);
+                        baAfter.push({{ issue.score }});
+                    }
+                    {% endfor %}
+                {% endif %}
+                
+                // Fill any undefined values
+                for (let i = 0; i < baLabels.length; i++) {
+                    if (baBefore[i] === undefined) baBefore[i] = 0;
+                    if (baAfter[i] === undefined) baAfter[i] = 0;
+                }
+                
+                new Chart(ctxBeforeAfter, {
+                    type: 'bar',
+                    data: {
+                        labels: baLabels,
+                        datasets: [
+                            {
+                                label: 'Before Cleaning',
+                                data: baBefore,
+                                backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                                borderColor: 'rgba(245, 158, 11, 1)',
+                                borderWidth: 2
+                            },
+                            {
+                                label: 'After Cleaning',
+                                data: baAfter,
+                                backgroundColor: 'rgba(34, 197, 94, 0.7)',
+                                borderColor: 'rgba(34, 197, 94, 1)',
+                                borderWidth: 2
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'top',
+                                labels: {
+                                    font: { size: 14, weight: 'bold' }
+                                }
+                            },
+                            title: {
+                                display: true,
+                                text: 'Issue Severity Scores: Before vs After Cleaning',
+                                font: { size: 16, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                title: {
+                                    display: true,
+                                    text: 'Severity Score',
+                                    font: { size: 14, weight: 'bold' }
+                                }
+                            },
+                            x: {
+                                title: {
+                                    display: true,
+                                    text: 'Data Quality Issues',
+                                    font: { size: 14, weight: 'bold' }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            {% endif %}
+
+            <div style="margin-top: 4rem; padding-top: 3rem; border-top: 1px solid var(--border); text-align: center;">
+                <h3 style="margin-bottom: 1rem;">DOCUMENTATION</h3>
+                <p style="color: var(--text-muted); margin-bottom: 2rem; font-size: 0.9rem;">Generate a professional technical report for project submission or industry hand-off.</p>
+                <a href="/download_report" class="btn btn-secondary" style="background: var(--text-main); color: white; padding: 1rem 3rem;">
+                    DOWNLOAD TECHNICAL REPORT (.TXT)
+                </a>
+            </div>
+        </div>
+        {% endif %}
+        <script>
+            function showLoading(text, subtext) {
+                const overlay = document.getElementById('loadingOverlay');
+                if (text) overlay.querySelector('.loading-text').innerText = text;
+                if (subtext) overlay.querySelector('.loading-subtext').innerText = subtext;
+                overlay.style.display = 'flex';
+            }
+
+            // Repair button
+            const repairForm = document.querySelector('form[action="/clean"]');
+            if (repairForm) {
+                repairForm.addEventListener('submit', () => {
+                    showLoading('REPAIRING DATASET', 'Performing imputation, outlier capping, and categorical encoding...');
+                });
+            }
+
+            // Benchmark button
+             const benchmarkForm = document.querySelector('form[action="/train"]');
+             if (benchmarkForm) {
+                 benchmarkForm.addEventListener('submit', () => {
+                     showLoading('MODEL INTELLIGENCE', 'Training multiple algorithms and evaluating performance benchmarks...');
+                 });
+             }
+ 
+             // Return home link
+            const homeLink = document.querySelector('a[href="/dashboard"]');
+            if (homeLink) {
+                homeLink.addEventListener('click', () => {
+                    showLoading('INITIALIZING', 'Preparing for new analysis...');
+                });
+            }
+
+            Chart.defaults.font.family = "'Plus Jakarta Sans', sans-serif";
+            Chart.defaults.color = "#475569";
+
+            {% if selected_algo == 'All Algorithms' and orig_results and cleaned_results %}
+            const ctx = document.getElementById('comparisonChart').getContext('2d');
+            const labels = [];
+            const d1 = [];
+            const d2 = [];
+            {% for model, m in orig_results.items() %}
+                {% if m and 'error' not in m and model in cleaned_results and 'error' not in cleaned_results[model] %}
+                labels.push('{{ model }}');
+                d1.push({{ m.Accuracy if task_type == 'classification' else m['R2 Score'] }});
+                d2.push({{ cleaned_results[model].Accuracy if task_type == 'classification' else cleaned_results[model]['R2 Score'] }});
+                {% endif %}
+            {% endfor %}
+
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'ORIGINAL', data: d1, backgroundColor: '#94a3b8', borderRadius: 0 },
+                        { label: 'OPTIMIZED', data: d2, backgroundColor: '#065f46', borderRadius: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, max: 1, grid: { color: '#e2e8f0' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { position: 'top', align: 'end', labels: { boxWidth: 12, usePointStyle: true, pointStyle: 'rect' } } }
+                }
+            });
+            {% elif trained %}
+            const predCanvas = document.getElementById('predictionChart');
+            if (predCanvas) {
+            const predCtx = predCanvas.getContext('2d');
+            new Chart(predCtx, {
+                type: '{{ "bar" if task_type == "classification" else "line" }}',
+                data: {
+                    labels: Array.from({length: {{ (selected_metrics.y_test|length) if selected_metrics and selected_metrics.y_test else 0 }}}, (_, i) => i + 1),
+                    datasets: [
+                        { label: 'ACTUAL', data: {{ selected_metrics.y_test | tojson if selected_metrics and selected_metrics.y_test else "[]" }}, borderColor: '#1e293b', backgroundColor: 'rgba(30, 41, 59, 0.1)', borderWidth: 2, pointRadius: 0, tension: 0 },
+                        { label: 'PREDICTED', data: {{ selected_metrics.y_pred | tojson if selected_metrics and selected_metrics.y_pred else "[]" }}, borderColor: '#10b981', backgroundColor: 'rgba(16, 185, 129, 0.1)', borderWidth: 2, pointRadius: 0, tension: 0 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { grid: { color: '#e2e8f0' } },
+                        x: { display: false }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+            }
+            {% endif %}
+        </script>
+    </div>
+</body>
+</html>

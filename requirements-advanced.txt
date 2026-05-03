@@ -1,0 +1,11 @@
+# Optional advanced FYP stack
+# Install this only if you need advanced diagnostics/features:
+#   pip install -r requirements-advanced.txt
+
+cleanlab>=2.6.0
+xgboost>=2.1.0
+sentence-transformers>=3.0.0
+statsmodels>=0.14.0
+
+# Not available for Python 3.14 at time of writing.
+ydata-profiling>=4.9.0; python_version < "3.14"

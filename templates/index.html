@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADIE | Sharp Dataset Intelligence</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">PROCESSING CYCLE</div>
+        <div class="loading-subtext">ADIE Pipeline is analyzing your dataset. This may take a moment...</div>
+        <div class="processing-bar"></div>
+    </div>
+
+    <div class="container">
+        <header class="hero">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                <div>
+                    <h1>Dataset Intelligence.</h1>
+                    <p>Automated diagnostics, advanced repair, and predictive modeling for professional data scientists and researchers.</p>
+                </div>
+                <div style="text-align: right;">
+                    <div style="font-size: 0.8rem; font-weight: 700; color: var(--accent); margin-bottom: 0.5rem;">
+                        <i class="fas fa-user-circle"></i> {{ session['user']|upper }}
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="btn btn-secondary" style="padding: 0.5rem 1rem; font-size: 0.7rem; border-color: rgba(255,255,255,0.2); color: white;">
+                        LOGOUT
+                    </a>
+                </div>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="grid">
+            <div class="card">
+                <h3><i class="fas fa-upload" style="color: var(--primary);"></i> New Analysis</h3>
+                <p style="color: var(--text-muted); margin-bottom: 2rem;">Upload a CSV or ZIP file to initiate the ADIE Pipeline.</p>
+                
+                <form action="/analyze" method="post" enctype="multipart/form-data">
+                    <label class="upload-zone" for="fileInput">
+                        <i class="fas fa-file-invoice fa-3x" style="color: var(--border); margin-bottom: 1rem;"></i>
+                        <div style="font-weight: 700; color: var(--text-main);">SELECT FILE</div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted);">(CSV or ZIP)</p>
+                        <input type="file" name="file" id="fileInput" class="file-input" accept=".csv,.zip" required onchange="this.form.submit()">
+                    </label>
+                </form>
+            </div>
+
+            {% if default_datasets %}
+            <div class="card">
+                <h3><i class="fas fa-database" style="color: var(--primary);"></i> Default Datasets</h3>
+                <p style="color: var(--text-muted); margin-bottom: 2rem;">Quickly test the system with pre-validated data archives.</p>
+                <form action="/analyze_default" method="post">
+                    <select name="default_file" class="btn btn-secondary" style="width: 100%; margin-bottom: 1.5rem; text-align: left; text-transform: none;">
+                        {% for dataset in default_datasets %}
+                        <option value="{{ dataset }}">{{ dataset }}</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">
+                        <i class="fas fa-bolt"></i> RUN PIPELINE
+                    </button>
+                </form>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3><i class="fas fa-vial" style="color: var(--success);"></i> Diagnostics</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Automated detection of missing values, class imbalances, and statistical anomalies using IQR and correlation matrices.</p>
+            </div>
+            <div class="card">
+                <h3><i class="fas fa-shield-alt" style="color: var(--accent);"></i> Repair</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Intelligent imputation, outlier capping, and categorical encoding designed for production-grade machine learning pipelines.</p>
+            </div>
+            <div class="card">
+                <h3><i class="fas fa-chart-line" style="color: var(--primary);"></i> ML Benchmark</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Simultaneous training of multiple algorithms with comparative performance metrics and actual vs. predicted trend analysis.</p>
+            </div>
+        </div>
+
+        <footer style="margin-top: 4rem; padding-top: 2rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); font-size: 0.8rem;">
+            <div>&copy; 2026 ADIE Intelligence System.</div>
+            <div style="display: flex; gap: 2rem;">
+                <a href="#" style="color: inherit; text-decoration: none; font-weight: 600;">API DOCS</a>
+                <a href="#" style="color: inherit; text-decoration: none; font-weight: 600;">ACCESSIBILITY</a>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        function showLoading(text, subtext) {
+            const overlay = document.getElementById('loadingOverlay');
+            if (text) overlay.querySelector('.loading-text').innerText = text;
+            if (subtext) overlay.querySelector('.loading-subtext').innerText = subtext;
+            overlay.style.display = 'flex';
+        }
+
+        // Attach to all forms
+         document.querySelectorAll('form').forEach(form => {
+             form.addEventListener('submit', function(e) {
+                 if (this.action.includes('analyze_default')) {
+                     showLoading('ANALYZING DATASET', 'Extracting archives and preparing diagnostic environment...');
+                 } else {
+                     showLoading();
+                 }
+             });
+         });
+
+        // Special handling for the file input onchange submission
+        document.getElementById('fileInput').addEventListener('change', function() {
+            if (this.value) {
+                showLoading('UPLOADING DATASET', 'Extracting metadata and performing initial diagnostics...');
+            }
+        });
+    </script>
+</body>
+</html>

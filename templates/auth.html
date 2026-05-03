@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ADIE | Authenticate</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        .auth-card {
+            background: white;
+            width: 100%;
+            max-width: 450px;
+            padding: 3.5rem;
+            border-radius: var(--radius-sharp);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        .auth-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 5px;
+            background: var(--accent);
+        }
+        .auth-header {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+        .auth-header h1 {
+            font-size: 2.5rem;
+            margin: 0;
+            color: #0f172a;
+            letter-spacing: -0.05em;
+        }
+        .auth-header p {
+            color: #64748b;
+            font-size: 0.9rem;
+            margin-top: 0.5rem;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+            color: #1e293b;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 1rem;
+            border: 1.5px solid #e2e8f0;
+            border-radius: var(--radius-sharp);
+            font-family: inherit;
+            transition: all 0.2s;
+            font-size: 0.9rem;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
+        }
+        .auth-toggle {
+            text-align: center;
+            margin-top: 2rem;
+            font-size: 0.85rem;
+            color: #64748b;
+        }
+        .auth-toggle a {
+            color: var(--primary);
+            font-weight: 700;
+            text-decoration: none;
+        }
+        .auth-toggle a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">AUTHENTICATING</div>
+        <div class="loading-subtext">Verifying your intelligence credentials...</div>
+        <div class="processing-bar"></div>
+    </div>
+
+    <div class="auth-card">
+        <div class="auth-header">
+            <h1>{{ 'SIGN UP' if signup else 'LOG IN' }}</h1>
+            <p>{{ 'Create your ADIE professional account' if signup else 'Enter your credentials to access the tool' }}</p>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            {% for message in messages %}
+              <div class="alert alert-info" style="margin-bottom: 1.5rem; font-size: 0.8rem; padding: 0.75rem 1rem;">
+                <i class="fas fa-info-circle"></i> {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <form action="{{ url_for('signup_post' if signup else 'login_post') }}" method="post" id="authForm">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" name="username" required placeholder="e.g. data_scientist_01">
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <input type="password" name="password" required placeholder="••••••••">
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1.25rem;">
+                {{ 'CREATE ACCOUNT' if signup else 'ACCESS PIPELINE' }} <i class="fas fa-arrow-right" style="margin-left: 0.5rem;"></i>
+            </button>
+        </form>
+
+        <div class="auth-toggle">
+            {% if signup %}
+            Already have an account? <a href="{{ url_for('login') }}">Log In</a>
+            {% else %}
+            New to ADIE? <a href="{{ url_for('signup') }}">Create Account</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('authForm').addEventListener('submit', function() {
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        });
+    </script>
+</body>
+</html>
