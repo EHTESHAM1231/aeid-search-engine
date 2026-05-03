@@ -17,9 +17,6 @@ imbalanced-learn>=0.12.0
 # Serialization
 joblib>=1.4.0
 
-# Label Noise Detection (optional, app degrades gracefully if unavailable)
-cleanlab>=2.5.0
-
 # Additional Dependencies
 chardet>=5.2.0
 python-dateutil>=2.8.0
