@@ -1,4 +1,5 @@
 import os
+import logging
 import pandas as pd
 import numpy as np
 import json
@@ -14,25 +15,42 @@ from utils.report_generator import generate_text_report
 from utils.dataset_expert import analyze_dataset_expertly
 from utils.column_detector import detect_column_types
 from utils.encoding_detector import read_csv_with_encoding
+from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import joblib
 from functools import wraps
 
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+)
+logger = logging.getLogger('adie')
+
+# ---------------------------------------------------------------------------
+# App setup
+# ---------------------------------------------------------------------------
 app = Flask(__name__)
-app.secret_key = os.environ.get('SECRET_KEY', 'supersecretkey')
+app.secret_key = os.environ.get('SECRET_KEY', os.urandom(32).hex())
 
 @app.route('/health')
 def health():
     return {'status': 'ok'}, 200
+
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 DEFAULT_DATA_FOLDER = os.path.join('data', 'default')
 
-# Mock database for authentication
+# ---------------------------------------------------------------------------
+# User store — passwords hashed with werkzeug (pbkdf2)
+# ---------------------------------------------------------------------------
 USERS_FILE = os.path.join(UPLOAD_FOLDER, 'users.json')
 if not os.path.exists(USERS_FILE):
     with open(USERS_FILE, 'w') as f:
-        json.dump({"admin": "password123"}, f)
+        json.dump({"admin": generate_password_hash("password123")}, f)
 
 def login_required(f):
     @wraps(f)
@@ -41,6 +59,14 @@ def login_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def _user_upload_dir():
+    """Return a per-user upload directory, creating it if needed."""
+    username = session.get('user', '_anonymous')
+    user_dir = os.path.join(UPLOAD_FOLDER, f'user_{username}')
+    os.makedirs(user_dir, exist_ok=True)
+    return user_dir
 
 @app.route('/')
 def splash():
@@ -58,37 +84,61 @@ def signup():
 
 @app.route('/login_post', methods=['POST'])
 def login_post():
-    username = request.form.get('username')
-    password = request.form.get('password')
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
     
-    with open(USERS_FILE, 'r') as f:
-        users = json.load(f)
+    if not username or not password:
+        flash('Username and password are required.')
+        return redirect(url_for('login'))
     
-    if username in users and users[username] == password:
+    try:
+        with open(USERS_FILE, 'r') as f:
+            users = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        logger.error('Failed to read users file')
+        flash('Authentication service error. Please try again.')
+        return redirect(url_for('login'))
+    
+    stored = users.get(username)
+    if stored and check_password_hash(stored, password):
         session['user'] = username
+        logger.info('User %s logged in', username)
         flash(f'Welcome back, {username}!')
         return redirect(url_for('dashboard'))
     
+    logger.warning('Failed login attempt for user: %s', username)
     flash('Invalid credentials. Please try again.')
     return redirect(url_for('login'))
 
 @app.route('/signup_post', methods=['POST'])
 def signup_post():
-    username = request.form.get('username')
-    password = request.form.get('password')
+    username = request.form.get('username', '').strip()
+    password = request.form.get('password', '')
     
-    with open(USERS_FILE, 'r') as f:
-        users = json.load(f)
+    if not username or not password:
+        flash('Username and password are required.')
+        return redirect(url_for('signup'))
+    
+    if len(password) < 6:
+        flash('Password must be at least 6 characters.')
+        return redirect(url_for('signup'))
+    
+    try:
+        with open(USERS_FILE, 'r') as f:
+            users = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        users = {}
     
     if username in users:
         flash('Username already exists. Please choose another.')
         return redirect(url_for('signup'))
     
-    users[username] = password
+    users[username] = generate_password_hash(password)
     with open(USERS_FILE, 'w') as f:
         json.dump(users, f)
     
     session['user'] = username
+    logger.info('New user registered: %s', username)
     flash('Account created successfully! Welcome to ADIE.')
     return redirect(url_for('dashboard'))
 
@@ -101,11 +151,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # List default datasets
+    user_dir = _user_upload_dir()
     default_datasets = []
     if os.path.exists(DEFAULT_DATA_FOLDER):
         default_datasets = [f for f in os.listdir(DEFAULT_DATA_FOLDER) if f.endswith(('.csv', '.zip'))]
-    has_model = os.path.exists(os.path.join(app.config['UPLOAD_FOLDER'], 'best_model.pkl'))
+    has_model = os.path.exists(os.path.join(user_dir, 'best_model.pkl'))
     return render_template('index.html', default_datasets=default_datasets, has_model=has_model)
 
 def allowed_file(filename):
@@ -156,6 +206,7 @@ def _distribution_drift_report(before_df, after_df):
 @login_required
 def analyze_default():
     try:
+        user_dir = _user_upload_dir()
         selected_file = request.form.get('default_file')
         if not selected_file:
             flash('No default file selected')
@@ -166,9 +217,8 @@ def analyze_default():
             flash('Selected default file not found')
             return redirect(url_for('dashboard'))
         
-        # Copy to uploads for processing (following the pipeline flow)
         target_name = 'current_dataset.csv'
-        target_path = os.path.join(app.config['UPLOAD_FOLDER'], target_name)
+        target_path = os.path.join(user_dir, target_name)
         
         if selected_file.endswith('.zip'):
             with zipfile.ZipFile(source_path, 'r') as zip_ref:
@@ -176,22 +226,17 @@ def analyze_default():
                 if not csv_files:
                     flash('No CSV file found inside the ZIP')
                     return redirect(url_for('dashboard'))
-                zip_ref.extract(csv_files[0], app.config['UPLOAD_FOLDER'])
-                temp_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_files[0])
+                zip_ref.extract(csv_files[0], user_dir)
+                temp_path = os.path.join(user_dir, csv_files[0])
                 if os.path.exists(target_path): os.remove(target_path)
                 os.rename(temp_path, target_path)
         else:
-            import shutil
             shutil.copy(source_path, target_path)
         
-        # Now trigger the ADIE Pipeline just like a regular upload
         df = read_csv_with_encoding(target_path)
         target_col = df.columns[-1]
-        
-        # Detect column types for metadata
         col_types = detect_column_types(df, target_col)
         
-        # Metadata Extraction
         metadata = {
             "filename": selected_file,
             "size_kb": round(os.path.getsize(target_path) / 1024, 2),
@@ -207,26 +252,27 @@ def analyze_default():
                 "ordinal_categorical": col_types['ordinal_categorical']
             }
         }
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'metadata.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
 
         diagnostics = perform_diagnostics(df)
         expert_report = analyze_dataset_expertly(df, diagnostics)
         
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'diagnostics.json'), 'w') as f:
             json.dump(diagnostics, f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'expert_report.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'expert_report.json'), 'w') as f:
             json.dump(expert_report, f)
-            
+        
+        logger.info('Default dataset analyzed: %s by user %s', selected_file, session.get('user'))
         return render_template('result.html', diagnostics=diagnostics, expert_report=expert_report, metadata=metadata, filename=selected_file)
     except Exception as e:
+        logger.exception('Failed to analyze default dataset: %s', e)
         flash(f'Failed to analyze default dataset: {str(e)}')
         return redirect(url_for('dashboard'))
 
 @app.route('/analyze', methods=['POST'])
 @login_required
 def analyze():
-    # 1. User -> Web Interface (Frontend) -> POST Request
     if 'file' not in request.files:
         flash('No file part')
         return redirect(url_for('dashboard'))
@@ -237,9 +283,9 @@ def analyze():
         return redirect(url_for('dashboard'))
     
     try:
-        # 2. Backend API (Python) -> Validation
-        filename = file.filename
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        user_dir = _user_upload_dir()
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(user_dir, filename)
         file.save(filepath)
         
         csv_path = None
@@ -249,21 +295,20 @@ def analyze():
                 if not csv_files:
                     flash('No CSV file found inside the ZIP')
                     return redirect(url_for('dashboard'))
-                zip_ref.extract(csv_files[0], app.config['UPLOAD_FOLDER'])
-                csv_path = os.path.join(app.config['UPLOAD_FOLDER'], csv_files[0])
-                target_path = os.path.join(app.config['UPLOAD_FOLDER'], 'current_dataset.csv')
+                zip_ref.extract(csv_files[0], user_dir)
+                csv_path = os.path.join(user_dir, csv_files[0])
+                target_path = os.path.join(user_dir, 'current_dataset.csv')
                 if os.path.exists(target_path):
                     os.remove(target_path)
                 os.rename(csv_path, target_path)
                 csv_path = target_path
         else:
-            target_path = os.path.join(app.config['UPLOAD_FOLDER'], 'current_dataset.csv')
+            target_path = os.path.join(user_dir, 'current_dataset.csv')
             if os.path.exists(target_path):
                 os.remove(target_path)
             os.rename(filepath, target_path)
             csv_path = target_path
 
-        # 3. Dataset Storage (Local Hybrid) -> Trigger Processing (ADIE Pipeline)
         df = read_csv_with_encoding(csv_path)
         df.columns = df.columns.str.strip()
         target_col = df.columns[-1]
@@ -284,34 +329,35 @@ def analyze():
                 "ordinal_categorical": col_types['ordinal_categorical']
             }
         }
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'metadata.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'metadata.json'), 'w') as f:
             json.dump(metadata, f)
 
         diagnostics = perform_diagnostics(df)
         expert_report = analyze_dataset_expertly(df, diagnostics)
         
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'diagnostics.json'), 'w') as f:
             json.dump(diagnostics, f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'expert_report.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'expert_report.json'), 'w') as f:
             json.dump(expert_report, f)
         
+        logger.info('Dataset analyzed: %s by user %s', filename, session.get('user'))
         return render_template('result.html', diagnostics=diagnostics, expert_report=expert_report, metadata=metadata, filename=filename)
     except Exception as e:
+        logger.exception('Failed to analyze dataset: %s', e)
         flash(f'Failed to analyze dataset: {str(e)}')
         return redirect(url_for('dashboard'))
 
 @app.route('/clean', methods=['POST'])
 @login_required
 def clean():
-    # ADIE Pipeline Stage 2: Data Cleaning (Repair)
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'current_dataset.csv')
-    diag_path = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json')
+    user_dir = _user_upload_dir()
+    filepath = os.path.join(user_dir, 'current_dataset.csv')
+    diag_path = os.path.join(user_dir, 'diagnostics.json')
     
     if not os.path.exists(filepath):
         flash('No dataset found to clean')
         return redirect(url_for('dashboard'))
     
-    # Load leakage info from diagnostics if it exists
     leakage_cols = None
     if os.path.exists(diag_path):
         with open(diag_path, 'r') as f:
@@ -331,11 +377,10 @@ def clean():
         
         orig_diagnostics = perform_diagnostics(df)
 
-        # --- Intelligent strategy generation ---
         strategy = run_intelligent_analysis(df, target_col)
 
         version_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        version_dir = os.path.join(app.config['UPLOAD_FOLDER'], f'version_{version_timestamp}')
+        version_dir = os.path.join(user_dir, f'version_{version_timestamp}')
         os.makedirs(version_dir, exist_ok=True)
         shutil.copy(filepath, os.path.join(version_dir, 'before_clean.csv'))
         
@@ -349,11 +394,10 @@ def clean():
             strategy=strategy
         )
         
-        cleaned_filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'cleaned_dataset.csv')
+        cleaned_filepath = os.path.join(user_dir, 'cleaned_dataset.csv')
         cleaned_df.to_csv(cleaned_filepath, index=False)
         shutil.copy(cleaned_filepath, os.path.join(version_dir, 'after_clean.csv'))
 
-        # Generate ML-ready dataset separately to keep user export human-readable.
         ml_policy = {
             'mode': 'balanced',
             'drop_identifier_columns': False,
@@ -371,7 +415,7 @@ def clean():
             cleaning_policy=ml_policy,
             strategy=strategy
         )
-        ml_ready_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ml_ready_dataset.csv')
+        ml_ready_path = os.path.join(user_dir, 'ml_ready_dataset.csv')
         ml_ready_df.to_csv(ml_ready_path, index=False)
         shutil.copy(ml_ready_path, os.path.join(version_dir, 'ml_ready_dataset.csv'))
         
@@ -409,16 +453,16 @@ def clean():
             json.dump(cleaning_report, f)
         with open(os.path.join(version_dir, 'drift_report.json'), 'w') as f:
             json.dump(_distribution_drift_report(df, cleaned_df), f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'cleaning_log.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'cleaning_log.json'), 'w') as f:
             json.dump(cleaning_report, f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'original_diagnostics.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'original_diagnostics.json'), 'w') as f:
             json.dump(orig_diagnostics, f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'diagnostics.json'), 'w') as f:
             json.dump(diagnostics, f)
-        with open(os.path.join(app.config['UPLOAD_FOLDER'], 'expert_report.json'), 'w') as f:
+        with open(os.path.join(user_dir, 'expert_report.json'), 'w') as f:
             json.dump(expert_report, f)
         
-        meta_path = os.path.join(app.config['UPLOAD_FOLDER'], 'metadata.json')
+        meta_path = os.path.join(user_dir, 'metadata.json')
         metadata = None
         if os.path.exists(meta_path):
             with open(meta_path, 'r') as f:
@@ -433,6 +477,7 @@ def clean():
             flash(f'Quality gate warning: {warning}')
         flash('ADIE Pipeline: Dataset successfully repaired and optimized!')
         
+        logger.info('Dataset cleaned by user %s', session.get('user'))
         return render_template('result.html', 
                                diagnostics=diagnostics, 
                                expert_report=expert_report, 
@@ -441,14 +486,16 @@ def clean():
                                cleaned=True,
                                orig_diagnostics=orig_diagnostics)
     except Exception as e:
+        logger.exception('Failed to clean dataset: %s', e)
         flash(f'Failed to clean dataset: {str(e)}')
         return redirect(url_for('dashboard'))
 
 @app.route('/train', methods=['POST'])
 @login_required
 def train():
-    orig_filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'current_dataset.csv')
-    cleaned_filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'cleaned_dataset.csv')
+    user_dir = _user_upload_dir()
+    orig_filepath = os.path.join(user_dir, 'current_dataset.csv')
+    cleaned_filepath = os.path.join(user_dir, 'cleaned_dataset.csv')
     selected_algo = request.form.get('algorithm', 'All Algorithms')
     
     if not os.path.exists(orig_filepath):
@@ -456,23 +503,20 @@ def train():
         return redirect(url_for('dashboard'))
         
     df_orig = read_csv_with_encoding(orig_filepath)
-    
-    # FIX: Sanitize column names
     df_orig.columns = df_orig.columns.str.strip()
-    
     target_col = df_orig.columns[-1]
     
     quarantined_columns = []
-    cleaning_log_path = os.path.join(app.config['UPLOAD_FOLDER'], 'cleaning_log.json')
+    cleaning_log_path = os.path.join(user_dir, 'cleaning_log.json')
     if os.path.exists(cleaning_log_path):
         try:
             with open(cleaning_log_path, 'r') as f:
                 cleaning_report = json.load(f)
                 quarantined_columns = cleaning_report.get('quarantined_columns', [])
         except Exception:
-            pass
+            logger.warning('Could not read cleaning log at %s', cleaning_log_path)
     
-    ml_ready_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ml_ready_dataset.csv')
+    ml_ready_path = os.path.join(user_dir, 'ml_ready_dataset.csv')
     ml_train_policy = {
         'mode': 'balanced',
         'drop_identifier_columns': False,
@@ -483,7 +527,6 @@ def train():
         'encode_features': True
     }
 
-    # --- Intelligent strategy for training ---
     strategy = run_intelligent_analysis(df_orig, target_col)
 
     try:
@@ -501,13 +544,12 @@ def train():
             quarantined_columns=quarantined_columns
         )
     except Exception as e:
+        logger.exception('Original dataset training failed: %s', e)
         orig_results = {selected_algo: {'error': f'Original dataset training failed: {str(e)}'}}
         task_type = 'classification'
     
     if os.path.exists(cleaned_filepath):
         df_cleaned = read_csv_with_encoding(cleaned_filepath)
-        
-        # FIX: Sanitize column names
         df_cleaned.columns = df_cleaned.columns.str.strip()
         
         try:
@@ -529,6 +571,7 @@ def train():
                 quarantined_columns=quarantined_columns
             )
         except Exception as e:
+            logger.exception('Cleaned dataset training failed: %s', e)
             cleaned_results = {selected_algo: {'error': f'Cleaned dataset training failed: {str(e)}'}}
     else:
         cleaned_results = {}
@@ -542,17 +585,15 @@ def train():
     if selected_algo != 'All Algorithms':
         selected_metrics = cleaned_results.get(selected_algo)
         if selected_metrics is None:
-            # Ensure template can always render a deterministic status.
             selected_metrics = {'error': f'"{selected_algo}" is not available for detected task type ({task_type}).'}
             cleaned_results[selected_algo] = selected_metrics
     
-    # Get expert report, diagnostics, and metadata from disk
     expert_report = None
     metadata = None
     diagnostics = None
-    expert_path = os.path.join(app.config['UPLOAD_FOLDER'], 'expert_report.json')
-    meta_path = os.path.join(app.config['UPLOAD_FOLDER'], 'metadata.json')
-    diag_path = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json')
+    expert_path = os.path.join(user_dir, 'expert_report.json')
+    meta_path = os.path.join(user_dir, 'metadata.json')
+    diag_path = os.path.join(user_dir, 'diagnostics.json')
     
     if os.path.exists(expert_path):
         with open(expert_path, 'r') as f:
@@ -564,16 +605,16 @@ def train():
         with open(diag_path, 'r') as f:
             diagnostics = json.load(f)
 
-    # Store results for report generation
     results_data = {
         'orig_results': orig_results,
         'cleaned_results': cleaned_results,
         'task_type': task_type,
         'selected_algo': selected_algo
     }
-    with open(os.path.join(app.config['UPLOAD_FOLDER'], 'ml_results.json'), 'w') as f:
+    with open(os.path.join(user_dir, 'ml_results.json'), 'w') as f:
         json.dump(results_data, f)
-        
+    
+    logger.info('Training complete for user %s, algo=%s', session.get('user'), selected_algo)
     return render_template('result.html', 
                            orig_results=orig_results, 
                            cleaned_results=cleaned_results, 
@@ -589,7 +630,8 @@ def train():
 @app.route('/download_cleaned')
 @login_required
 def download_cleaned():
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'cleaned_dataset.csv')
+    user_dir = _user_upload_dir()
+    filepath = os.path.join(user_dir, 'cleaned_dataset.csv')
     if os.path.exists(filepath):
         return send_file(filepath, as_attachment=True, download_name='cleaned_dataset.csv')
     flash('Cleaned dataset not found')
@@ -598,9 +640,10 @@ def download_cleaned():
 @app.route('/download_report')
 @login_required
 def download_report():
-    diag_path = os.path.join(app.config['UPLOAD_FOLDER'], 'diagnostics.json')
-    res_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ml_results.json')
-    expert_path = os.path.join(app.config['UPLOAD_FOLDER'], 'expert_report.json')
+    user_dir = _user_upload_dir()
+    diag_path = os.path.join(user_dir, 'diagnostics.json')
+    res_path = os.path.join(user_dir, 'ml_results.json')
+    expert_path = os.path.join(user_dir, 'expert_report.json')
     
     if os.path.exists(diag_path) and os.path.exists(res_path) and os.path.exists(expert_path):
         with open(diag_path, 'r') as f:
@@ -619,7 +662,7 @@ def download_report():
             results_data['selected_algo']
         )
         
-        report_path = os.path.join(app.config['UPLOAD_FOLDER'], 'analysis_report.txt')
+        report_path = os.path.join(user_dir, 'analysis_report.txt')
         with open(report_path, 'w') as f:
             f.write(report_text)
             
