@@ -1,3 +1,9 @@
+raise RuntimeError(
+    "Legacy cleaning module is deprecated and must not be used. "
+    "Import from utils.adaptive_cleaning instead."
+)
+
+# --- Original legacy code below (kept for reference only) ---
 import pandas as pd
 import numpy as np
 from sklearn.experimental import enable_iterative_imputer  # noqa: F401

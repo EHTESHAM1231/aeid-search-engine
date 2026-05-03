@@ -7,7 +7,8 @@ import shutil
 from datetime import datetime
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file, session
 from utils.data_analysis import perform_diagnostics
-from utils.data_cleaning import clean_dataset
+from utils.adaptive_cleaning import clean_dataset
+from utils.intelligent_engine import run_intelligent_analysis
 from utils.model_training import train_and_evaluate, MODEL_PATH, SCALER_PATH
 from utils.report_generator import generate_text_report
 from utils.dataset_expert import analyze_dataset_expertly
@@ -329,6 +330,10 @@ def clean():
                 leakage_cols = None
         
         orig_diagnostics = perform_diagnostics(df)
+
+        # --- Intelligent strategy generation ---
+        strategy = run_intelligent_analysis(df, target_col)
+
         version_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         version_dir = os.path.join(app.config['UPLOAD_FOLDER'], f'version_{version_timestamp}')
         os.makedirs(version_dir, exist_ok=True)
@@ -340,7 +345,8 @@ def clean():
             target_col=target_col,
             preserve_structure=True,
             cleaning_policy=cleaning_policy,
-            return_report=True
+            return_report=True,
+            strategy=strategy
         )
         
         cleaned_filepath = os.path.join(app.config['UPLOAD_FOLDER'], 'cleaned_dataset.csv')
@@ -362,7 +368,8 @@ def clean():
             leakage_cols=leakage_cols,
             target_col=target_col,
             preserve_structure=False,
-            cleaning_policy=ml_policy
+            cleaning_policy=ml_policy,
+            strategy=strategy
         )
         ml_ready_path = os.path.join(app.config['UPLOAD_FOLDER'], 'ml_ready_dataset.csv')
         ml_ready_df.to_csv(ml_ready_path, index=False)
@@ -476,12 +483,16 @@ def train():
         'encode_features': True
     }
 
+    # --- Intelligent strategy for training ---
+    strategy = run_intelligent_analysis(df_orig, target_col)
+
     try:
         df_orig_processed = clean_dataset(
             df_orig,
             target_col=target_col,
             preserve_structure=False,
-            cleaning_policy=ml_train_policy
+            cleaning_policy=ml_train_policy,
+            strategy=strategy
         )
         orig_results, task_type = train_and_evaluate(
             df_orig_processed, 
@@ -508,7 +519,8 @@ def train():
                     df_cleaned,
                     target_col=target_col,
                     preserve_structure=False,
-                    cleaning_policy=ml_train_policy
+                    cleaning_policy=ml_train_policy,
+                    strategy=strategy
                 )
             cleaned_results, _ = train_and_evaluate(
                 df_cleaned_processed, 

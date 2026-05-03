@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.column_detector import detect_column_types
-from utils.data_cleaning import clean_dataset
+from utils.adaptive_cleaning import clean_dataset
 from utils.data_analysis import perform_diagnostics
 
 def test_column_detector():

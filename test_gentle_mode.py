@@ -1,5 +1,5 @@
 import pandas as pd
-from utils.data_cleaning import clean_dataset
+from utils.adaptive_cleaning import clean_dataset
 
 
 def test_gentle_mode_preserves_columns():

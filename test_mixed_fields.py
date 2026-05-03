@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from utils.data_analysis import perform_diagnostics
-from utils.data_cleaning import clean_dataset
+from utils.adaptive_cleaning import clean_dataset
 
 print("=" * 70)
 print("TESTING MIXED FIELD INCONSISTENCY DETECTION & CLEANING")

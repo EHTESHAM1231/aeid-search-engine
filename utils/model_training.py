@@ -408,8 +408,8 @@ def train_and_evaluate(df, target_col, selected_algo='All Algorithms', quarantin
     return results, task_type
 
 def predict_new_data(filepath, target_col_name=None, quarantined_columns=None):
-    from utils.data_cleaning import clean_dataset
-    from utils.data_cleaning import ENCODER_PATH
+    from utils.adaptive_cleaning import clean_dataset
+    from utils.adaptive_cleaning import ENCODER_PATH
     
     if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
         raise ValueError("Model or scaler not found. Please train a model first.")

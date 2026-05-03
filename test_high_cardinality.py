@@ -29,7 +29,7 @@ print(f"Nominal categorical columns: {col_types['nominal_categorical']}")
 
 # Test cleaning
 print("\nTesting data cleaning with high-cardinality handling...")
-from utils.data_cleaning import clean_dataset
+from utils.adaptive_cleaning import clean_dataset
 
 try:
     cleaned_df = clean_dataset(df, target_col='target')
