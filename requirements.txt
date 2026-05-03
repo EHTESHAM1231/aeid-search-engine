@@ -2,6 +2,9 @@
 Flask>=3.0.0
 Werkzeug>=3.0.0
 
+# WSGI Server (required for Render / production deployment)
+gunicorn==21.2.0
+
 # Data Processing
 pandas>=2.2.0
 numpy>=1.26.0
